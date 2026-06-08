@@ -35,6 +35,7 @@ from pivot_calculator import calculate_pivot_points, format_pivot_table
 from data_fetcher import DataFetcher
 from price_monitor import PriceMonitor
 from alert_manager import AlertManager, AlertStatus
+from backtester import Backtester
 
 # Setup logging
 logging.basicConfig(
@@ -101,6 +102,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /price `BTCUSDT` — Harga real-time\n"
         "• /alert — Set alert SL/TP\n"
         "• /myalerts — Lihat alert aktif\n"
+        "• /backtest `BTCUSDT 90` — Cek win rate\n"
         "• /pivot `H L C` — Hitung pivot manual\n"
         "• /manual — Input data manual\n"
         "• /list — Daftar pair tersedia\n"
@@ -148,6 +150,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\n"
         "📝 *Format Alert:*\n"
         "`/alert <PAIR> <long/short> <ENTRY> <SL> <TP>`\n"
+        "\n"
+        "📝 *Format Backtest:*\n"
+        "`/backtest <PAIR> [DAYS]` — Cek win rate strategy\n"
         "\n"
         "📝 *Format Manual:*\n"
         "`/manual <PAIR> <OPEN> <PREV_OPEN> <HIGH> <LOW> <CLOSE>`\n"
@@ -657,6 +662,83 @@ async def manual_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
+# ========== BACKTEST COMMAND ==========
+
+async def backtest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Run a backtest on historical data.
+    Usage: /backtest <PAIR> [days]
+    Example: /backtest BTCUSDT 90
+    """
+    if not context.args:
+        await update.message.reply_text(
+            "📊 *BACKTEST — Format:*\n"
+            "`/backtest <PAIR> [DAYS]`\n\n"
+            "*Contoh:*\n"
+            "`/backtest BTCUSDT` — 30 hari (default)\n"
+            "`/backtest BTCUSDT 90` — 90 hari\n"
+            "`/backtest EURUSD 60` — Forex 60 hari\n\n"
+            "*Info:*\n"
+            "• Crypto max 500 hari\n"
+            "• Forex max 100 hari (API limit)\n"
+            "• Menggunakan data historis real dari Binance/TwelveData",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    symbol = context.args[0].upper()
+
+    # Parse days
+    days = 30
+    if len(context.args) >= 2:
+        try:
+            days = int(context.args[1])
+            days = max(5, min(days, 500))  # Clamp between 5 and 500
+        except ValueError:
+            await update.message.reply_text("❌ Jumlah hari harus angka!")
+            return
+
+    # Determine market type
+    is_crypto = symbol in CRYPTO_PAIRS
+    is_forex = symbol in FOREX_PAIRS
+
+    if not is_crypto and not is_forex:
+        await update.message.reply_text(
+            f"❌ Pair `{symbol}` tidak didukung. Gunakan /list",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Forex limit
+    if is_forex and days > 100:
+        days = 100
+        await update.message.reply_text(
+            "⚠️ Forex backtest dibatasi 100 hari (API limit). Menggunakan 100 hari."
+        )
+
+    await update.message.reply_text(
+        f"⏳ Running backtest: *{symbol}* | *{days} hari*...\n"
+        f"Mohon tunggu, ini bisa butuh beberapa detik.",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    # Run backtest
+    bt = Backtester()
+    result = await bt.run_backtest(symbol, days, is_crypto)
+
+    if not result:
+        await update.message.reply_text(
+            f"❌ Gagal backtest {symbol}. Data tidak tersedia atau API error.\n"
+            f"Coba lagi nanti atau gunakan pair lain.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Format and send result
+    message = Backtester.format_result(result)
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+
 # ========== QUICK BUTTONS ==========
 
 async def quick_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -868,6 +950,7 @@ def main():
     app.add_handler(CommandHandler("alert", alert_command))
     app.add_handler(CommandHandler("myalerts", myalerts_command))
     app.add_handler(CommandHandler("removealert", removealert_command))
+    app.add_handler(CommandHandler("backtest", backtest_command))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Error handler
