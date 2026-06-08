@@ -23,3 +23,17 @@ CRYPTO_PAIRS = [
 
 # Timeframes
 DEFAULT_TIMEFRAME = "1d"  # Daily for pivot calculations
+
+# ========== PRICE MONITOR SETTINGS ==========
+
+# How often to check crypto prices (seconds) - via REST polling fallback
+CRYPTO_POLL_INTERVAL = 5
+
+# How often to check forex prices (seconds) - rate limited API
+FOREX_POLL_INTERVAL = 15
+
+# Maximum alerts per user
+MAX_ALERTS_PER_USER = 10
+
+# Alert expiry time (hours) - alerts auto-expire after this
+ALERT_EXPIRY_HOURS = 72  # 3 days

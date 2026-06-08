@@ -4,6 +4,7 @@ Fetches OHLC data for Forex and Crypto pairs from free APIs.
 
 - Crypto: Binance Public API (no key needed)
 - Forex: Twelve Data API or fallback to manual input
+- Real-time: Binance ticker for instant price checks
 """
 
 import aiohttp
@@ -28,6 +29,8 @@ class DataFetcher:
     """Fetches market data from public APIs."""
     
     BINANCE_BASE = "https://api.binance.com/api/v3"
+    BINANCE_TICKER = "https://api.binance.com/api/v3/ticker/price"
+    BINANCE_24H = "https://api.binance.com/api/v3/ticker/24hr"
     
     async def fetch_crypto_klines(self, symbol: str, interval: str = "1d", 
                                    limit: int = 2) -> Optional[list]:
@@ -156,3 +159,139 @@ class DataFetcher:
             "pdh": previous.high,  # Previous Day High
             "pdl": previous.low,   # Previous Day Low
         }
+
+    # ========== REAL-TIME PRICE METHODS ==========
+
+    async def get_realtime_price_crypto(self, symbol: str) -> Optional[float]:
+        """
+        Get real-time price for a crypto pair from Binance ticker.
+        
+        Args:
+            symbol: e.g., 'BTCUSDT'
+            
+        Returns:
+            Current price as float, or None on error
+        """
+        url = self.BINANCE_TICKER
+        params = {"symbol": symbol.upper()}
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return float(data["price"])
+                    return None
+        except Exception as e:
+            print(f"Error fetching real-time crypto price: {e}")
+            return None
+
+    async def get_realtime_price_forex(self, symbol: str) -> Optional[float]:
+        """
+        Get real-time price for a forex pair from TwelveData.
+        
+        Args:
+            symbol: e.g., 'EURUSD'
+            
+        Returns:
+            Current price as float, or None on error
+        """
+        if "/" not in symbol and len(symbol) == 6:
+            formatted = f"{symbol[:3]}/{symbol[3:]}"
+        elif "/" not in symbol and len(symbol) > 6:
+            # Handle XAUUSD style
+            formatted = f"{symbol[:3]}/{symbol[3:]}"
+        else:
+            formatted = symbol
+        
+        url = "https://api.twelvedata.com/price"
+        params = {"symbol": formatted, "apikey": "demo"}
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if "price" in data:
+                            return float(data["price"])
+                    return None
+        except Exception as e:
+            print(f"Error fetching real-time forex price: {e}")
+            return None
+
+    async def get_realtime_price(self, symbol: str, is_crypto: bool = True) -> Optional[float]:
+        """
+        Get real-time price for any symbol.
+        
+        Args:
+            symbol: Trading pair
+            is_crypto: True for crypto (Binance), False for forex (TwelveData)
+            
+        Returns:
+            Current price as float, or None
+        """
+        if is_crypto:
+            return await self.get_realtime_price_crypto(symbol)
+        else:
+            return await self.get_realtime_price_forex(symbol)
+
+    async def get_crypto_24h_stats(self, symbol: str) -> Optional[dict]:
+        """
+        Get 24h statistics for a crypto pair.
+        
+        Returns dict with:
+        - price: current price
+        - high_24h: 24h high
+        - low_24h: 24h low
+        - change_pct: 24h change percentage
+        - volume: 24h volume
+        """
+        url = self.BINANCE_24H
+        params = {"symbol": symbol.upper()}
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return {
+                            "price": float(data["lastPrice"]),
+                            "high_24h": float(data["highPrice"]),
+                            "low_24h": float(data["lowPrice"]),
+                            "change_pct": float(data["priceChangePercent"]),
+                            "volume": float(data["volume"]),
+                            "open": float(data["openPrice"]),
+                        }
+                    return None
+        except Exception as e:
+            print(f"Error fetching 24h stats: {e}")
+            return None
+
+    async def get_multi_crypto_prices(self, symbols: list) -> dict:
+        """
+        Get real-time prices for multiple crypto pairs in one call.
+        
+        Args:
+            symbols: List of symbols, e.g., ['BTCUSDT', 'ETHUSDT']
+            
+        Returns:
+            Dict of symbol -> price
+        """
+        url = self.BINANCE_TICKER
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Fetch all tickers at once
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        all_data = await resp.json()
+                        prices = {}
+                        symbols_upper = {s.upper() for s in symbols}
+                        for item in all_data:
+                            if item["symbol"] in symbols_upper:
+                                prices[item["symbol"]] = float(item["price"])
+                        return prices
+                    return {}
+        except Exception as e:
+            print(f"Error fetching multi prices: {e}")
+            return {}
