@@ -965,4 +965,11 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys
+
+    # Fix for Python 3.12+ / 3.14 asyncio event loop issue
+    if sys.version_info >= (3, 12):
+        import asyncio
+        asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
     main()
