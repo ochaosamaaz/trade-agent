@@ -962,23 +962,41 @@ def main():
     print("🔔 Alert system: ACTIVE")
     print("Press Ctrl+C to stop.")
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    asyncio.run(_run_bot(app))
 
-    try:
-        loop.run_until_complete(app.initialize())
-        loop.run_until_complete(app.start())
-        loop.run_until_complete(
-            app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        )
-        loop.run_forever()
-    except KeyboardInterrupt:
-        print("\n👋 Shutting down...")
-    finally:
-        loop.run_until_complete(app.updater.stop())
-        loop.run_until_complete(app.stop())
-        loop.run_until_complete(app.shutdown())
-        loop.close()
+
+async def _run_bot(app: Application):
+    """Run the bot using asyncio.run() for Python 3.12+ compatibility."""
+    async with app:
+        await app.start()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        
+        # Keep running until interrupted
+        stop_event = asyncio.Event()
+        
+        import signal as sig
+        import sys
+        
+        def _stop(*args):
+            stop_event.set()
+        
+        if sys.platform != "win32":
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(sig.SIGINT, _stop)
+            loop.add_signal_handler(sig.SIGTERM, _stop)
+        else:
+            # Windows: signal handling via thread
+            sig.signal(sig.SIGINT, _stop)
+            sig.signal(sig.SIGTERM, _stop)
+        
+        try:
+            await stop_event.wait()
+        except (KeyboardInterrupt, SystemExit):
+            pass
+        finally:
+            print("\n👋 Shutting down...")
+            await app.updater.stop()
+            await app.stop()
 
 
 if __name__ == "__main__":
