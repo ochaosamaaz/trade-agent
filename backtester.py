@@ -456,60 +456,83 @@ class Backtester:
             return await self._fetch_forex_history(symbol, days)
 
     async def _fetch_crypto_history(self, symbol: str, days: int) -> Optional[list]:
-        """Fetch crypto daily history from Binance."""
+        """Fetch crypto daily history from Binance with fallback endpoints."""
         import aiohttp
 
-        url = "https://api.binance.com/api/v3/klines"
+        endpoints = [
+            "https://api4.binance.com/api/v3",
+            "https://api3.binance.com/api/v3",
+            "https://api2.binance.com/api/v3",
+            "https://api1.binance.com/api/v3",
+            "https://api.binance.com/api/v3",
+            "https://data-api.binance.vision/api/v3",
+        ]
+
         params = {
             "symbol": symbol.upper(),
             "interval": "1d",
-            "limit": min(days, 500)  # Binance max 500
+            "limit": min(days, 500)
         }
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        result = []
-                        for candle in data:
-                            from datetime import datetime
-                            ts = int(candle[0]) / 1000
-                            dt = datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d')
-                            result.append({
-                                "open": float(candle[1]),
-                                "high": float(candle[2]),
-                                "low": float(candle[3]),
-                                "close": float(candle[4]),
-                                "date": dt
-                            })
-                        return result
-                    return None
-        except Exception as e:
-            print(f"Backtest fetch error: {e}")
-            return None
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=False),
+            timeout=aiohttp.ClientTimeout(total=20)
+        ) as session:
+            for base_url in endpoints:
+                try:
+                    url = f"{base_url}/klines"
+                    async with session.get(url, params=params) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            result = []
+                            for candle in data:
+                                from datetime import datetime
+                                ts = int(candle[0]) / 1000
+                                dt = datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d')
+                                result.append({
+                                    "open": float(candle[1]),
+                                    "high": float(candle[2]),
+                                    "low": float(candle[3]),
+                                    "close": float(candle[4]),
+                                    "date": dt
+                                })
+                            return result
+                except Exception as e:
+                    continue
+
+        print(f"Backtest fetch error: All Binance endpoints failed for {symbol}")
+        return None
 
     async def _fetch_forex_history(self, symbol: str, days: int) -> Optional[list]:
         """Fetch forex daily history from TwelveData."""
         import aiohttp
+        import os
 
-        if "/" not in symbol and len(symbol) == 6:
+        # Format symbol properly
+        special = {"XAUUSD": "XAU/USD", "XAGUSD": "XAG/USD"}
+        if symbol.upper() in special:
+            formatted = special[symbol.upper()]
+        elif "/" not in symbol and len(symbol) == 6:
             formatted = f"{symbol[:3]}/{symbol[3:]}"
         elif "/" not in symbol:
             formatted = f"{symbol[:3]}/{symbol[3:]}"
         else:
             formatted = symbol
 
+        api_key = os.getenv("TWELVE_DATA_API_KEY", "demo")
         url = "https://api.twelvedata.com/time_series"
         params = {
             "symbol": formatted,
             "interval": "1day",
             "outputsize": min(days, 100),
-            "apikey": "demo"
+            "apikey": api_key
         }
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(ssl=False),
+                timeout=aiohttp.ClientTimeout(total=20)
+            ) as session:
                 async with session.get(url, params=params) as resp:
                     if resp.status == 200:
                         data = await resp.json()

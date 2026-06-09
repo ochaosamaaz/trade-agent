@@ -43,12 +43,14 @@ class DataFetcher:
     """Fetches market data from public APIs with fallback support."""
     
     # Primary and fallback Binance endpoints
+    # Includes mirrors that work in regions where Binance is blocked
     BINANCE_ENDPOINTS = [
-        "https://api.binance.com/api/v3",
-        "https://api1.binance.com/api/v3",
-        "https://api2.binance.com/api/v3",
-        "https://api3.binance.com/api/v3",
         "https://api4.binance.com/api/v3",
+        "https://api3.binance.com/api/v3",
+        "https://api2.binance.com/api/v3",
+        "https://api1.binance.com/api/v3",
+        "https://api.binance.com/api/v3",
+        "https://data-api.binance.vision/api/v3",
     ]
     
     # TwelveData API

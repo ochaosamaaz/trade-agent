@@ -22,11 +22,12 @@ class PriceMonitor:
     """
 
     BINANCE_ENDPOINTS = [
-        "https://api.binance.com/api/v3",
-        "https://api1.binance.com/api/v3",
-        "https://api2.binance.com/api/v3",
-        "https://api3.binance.com/api/v3",
         "https://api4.binance.com/api/v3",
+        "https://api3.binance.com/api/v3",
+        "https://api2.binance.com/api/v3",
+        "https://api1.binance.com/api/v3",
+        "https://api.binance.com/api/v3",
+        "https://data-api.binance.vision/api/v3",
     ]
 
     TWELVE_DATA_BASE = "https://api.twelvedata.com"
