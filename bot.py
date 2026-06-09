@@ -961,15 +961,25 @@ def main():
     print("📡 Real-time price monitor: ACTIVE")
     print("🔔 Alert system: ACTIVE")
     print("Press Ctrl+C to stop.")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        loop.run_until_complete(app.initialize())
+        loop.run_until_complete(app.start())
+        loop.run_until_complete(
+            app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        )
+        loop.run_forever()
+    except KeyboardInterrupt:
+        print("\n👋 Shutting down...")
+    finally:
+        loop.run_until_complete(app.updater.stop())
+        loop.run_until_complete(app.stop())
+        loop.run_until_complete(app.shutdown())
+        loop.close()
 
 
 if __name__ == "__main__":
-    import sys
-
-    # Fix for Python 3.12+ / 3.14 asyncio event loop issue
-    if sys.version_info >= (3, 12):
-        import asyncio
-        asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-
     main()
