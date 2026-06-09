@@ -747,6 +747,10 @@ async def backtest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def paperstart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start paper trading. Subscribes this chat to forward test signals."""
+    if not paper_trader:
+        await update.message.reply_text("❌ Paper trader tidak tersedia. Restart bot.")
+        return
+
     chat_id = update.effective_chat.id
 
     if paper_trader.is_subscribed(chat_id):
@@ -793,6 +797,10 @@ async def paperstart_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def paperstop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Stop paper trading for this chat."""
+    if not paper_trader:
+        await update.message.reply_text("❌ Paper trader tidak tersedia.")
+        return
+
     chat_id = update.effective_chat.id
 
     if not paper_trader.is_subscribed(chat_id):
@@ -811,12 +819,20 @@ async def paperstop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def paperjournal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show paper trading journal and stats."""
+    if not paper_trader:
+        await update.message.reply_text("❌ Paper trader tidak tersedia.")
+        return
+
     journal = paper_trader.get_journal()
     await update.message.reply_text(journal, parse_mode=ParseMode.MARKDOWN)
 
 
 async def paperscan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Force a paper trading scan now."""
+    if not paper_trader:
+        await update.message.reply_text("❌ Paper trader tidak tersedia.")
+        return
+
     chat_id = update.effective_chat.id
 
     if not paper_trader.is_subscribed(chat_id):
@@ -1021,31 +1037,36 @@ async def post_init(application: Application):
 
     app_instance = application
 
-    # Initialize alert manager with notification callback
+    # Initialize alert manager FIRST (other commands depend on it)
     alert_manager = AlertManager(notify_callback=send_alert_notification)
 
     # Initialize price monitor
-    price_monitor = PriceMonitor(
-        on_price_update=on_price_update,
-        check_interval=CRYPTO_POLL_INTERVAL
-    )
+    try:
+        price_monitor = PriceMonitor(
+            on_price_update=on_price_update,
+            check_interval=CRYPTO_POLL_INTERVAL
+        )
 
-    # Load existing alert symbols into monitor
-    crypto_symbols, forex_symbols = alert_manager.get_all_active_symbols()
-    for s in crypto_symbols:
-        price_monitor.add_crypto_symbol(s)
-    for s in forex_symbols:
-        price_monitor.add_forex_symbol(s)
+        # Load existing alert symbols into monitor
+        crypto_symbols, forex_symbols = alert_manager.get_all_active_symbols()
+        for s in crypto_symbols:
+            price_monitor.add_crypto_symbol(s)
+        for s in forex_symbols:
+            price_monitor.add_forex_symbol(s)
 
-    # Start the monitor
-    await price_monitor.start()
+        await price_monitor.start()
+    except Exception as e:
+        logger.error(f"Price monitor init error: {e}")
 
-    # Initialize paper trader
-    paper_trader = PaperTrader(notify_callback=send_paper_notification)
-    await paper_trader.start()
+    # Initialize paper trader (non-critical — don't crash bot if this fails)
+    try:
+        paper_trader = PaperTrader(notify_callback=send_paper_notification)
+        await paper_trader.start()
+    except Exception as e:
+        logger.error(f"Paper trader init error: {e}")
 
     active_count = alert_manager.get_active_count()
-    paper_subs = len(paper_trader.subscribers)
+    paper_subs = len(paper_trader.subscribers) if paper_trader else 0
     logger.info(f"✅ Bot initialized | {active_count} alerts | {paper_subs} paper subs")
 
 
