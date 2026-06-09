@@ -191,22 +191,35 @@ class DataFetcher:
         # Fallback
         return symbol
     
-    async def get_analysis_data(self, symbol: str, is_crypto: bool = True) -> Optional[dict]:
+    async def get_analysis_data(self, symbol: str, is_crypto: bool = True,
+                                include_candles: bool = True) -> Optional[dict]:
         """
-        Get all data needed for Quantum analysis.
-        """
-        if is_crypto:
-            candles = await self.fetch_crypto_klines(symbol, "1d", 3)
-        else:
-            candles = await self.fetch_forex_data(symbol)
+        Get all data needed for Quantum + SMC analysis.
         
-        if not candles or len(candles) < 2:
+        Args:
+            symbol: Trading pair
+            is_crypto: True for crypto, False for forex
+            include_candles: If True, fetch extra candles for SMC analysis
+            
+        Returns dict with:
+        - current_open, previous_open, prev_high, prev_low, prev_close, pdh, pdl
+        - candles: list of {open, high, low, close} for SMC (if include_candles=True)
+        """
+        # Fetch more candles for SMC analysis (need 15-20 for good OB/FVG detection)
+        num_candles = 20 if include_candles else 3
+        
+        if is_crypto:
+            raw_candles = await self.fetch_crypto_klines(symbol, "1d", num_candles)
+        else:
+            raw_candles = await self.fetch_forex_data(symbol)
+        
+        if not raw_candles or len(raw_candles) < 2:
             return None
         
-        current = candles[-1]
-        previous = candles[-2]
+        current = raw_candles[-1]
+        previous = raw_candles[-2]
         
-        return {
+        result = {
             "current_open": current.open,
             "previous_open": previous.open,
             "prev_high": previous.high,
@@ -215,6 +228,15 @@ class DataFetcher:
             "pdh": previous.high,
             "pdl": previous.low,
         }
+        
+        # Convert candles to dict format for SMC engine
+        if include_candles:
+            result["candles"] = [
+                {"open": c.open, "high": c.high, "low": c.low, "close": c.close}
+                for c in raw_candles[:-1]  # Exclude current (incomplete) candle
+            ]
+        
+        return result
 
     # ========== REAL-TIME PRICE METHODS ==========
 

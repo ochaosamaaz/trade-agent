@@ -1,16 +1,22 @@
 """
-Backtesting Engine for Quantum Physics Trading Theory
+Backtesting Engine for Quantum Physics Trading Theory + Smart Money Concepts
 
 Logic:
 1. For each day, compare Open vs Previous Open to determine bias (UP/DOWN)
 2. Calculate Pivot Points from previous day's H/L/C
-3. Determine entry zones based on bias + validation
-4. Check if price hit TP (PDH/PDL sweep) or SL during that day
-5. Collect stats: win rate, avg profit, avg loss, R:R, drawdown, etc.
+3. Run SMC analysis on recent candles for confluence scoring
+4. Determine entry zones based on bias + validation
+5. FILTER: Skip trade if SMC confluence < 50 (configurable)
+6. Check if price hit TP (PDH/PDL sweep) or SL during that day
+7. Collect stats: win rate, avg profit, avg loss, R:R, drawdown, etc.
 
 Entry Rules:
 - UP bias → Buy at PP or S1 (whichever is valid)
 - DOWN bias → Sell at PP or R1 (whichever is valid)
+
+SMC Filter:
+- Score >= 50: Take the trade
+- Score < 50: Skip (marked as SMC_FILTERED)
 
 TP Target:
 - UP → PDH (Previous Day High)
@@ -31,7 +37,11 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional
 from pivot_calculator import calculate_pivot_points
+from smc_engine import SMCEngine
 from data_fetcher import DataFetcher
+
+# Minimum SMC confluence score to take a trade
+SMC_MIN_SCORE = 50
 
 
 @dataclass
@@ -45,9 +55,10 @@ class BacktestTrade:
     entry_type: str  # "PP", "S1", "R1"
     stop_loss: float
     take_profit: float
-    result: str  # "WIN", "LOSS", "NO_ENTRY", "NEUTRAL"
+    result: str  # "WIN", "LOSS", "NO_ENTRY", "NEUTRAL", "SMC_FILTERED"
     pnl_pct: float = 0.0
     rr_ratio: float = 0.0
+    smc_score: int = 0
     notes: str = ""
 
 
@@ -61,6 +72,7 @@ class BacktestResult:
     losses: int
     no_entry: int
     neutral_days: int
+    smc_filtered: int
     win_rate: float
     avg_win_pct: float
     avg_loss_pct: float
@@ -70,20 +82,23 @@ class BacktestResult:
     max_drawdown_pct: float
     profit_factor: float
     avg_rr: float
+    avg_smc_score: float
     trades: list = field(default_factory=list)
 
 
 class Backtester:
     """
-    Backtesting engine for Quantum Physics Trading Theory.
+    Backtesting engine for Quantum Physics Trading Theory + SMC.
     Uses historical daily candles to simulate the strategy.
     """
 
     def __init__(self):
         self.fetcher = DataFetcher()
+        self.smc = SMCEngine()
 
     async def run_backtest(self, symbol: str, days: int = 30,
-                           is_crypto: bool = True) -> Optional[BacktestResult]:
+                           is_crypto: bool = True,
+                           use_smc_filter: bool = True) -> Optional[BacktestResult]:
         """
         Run a backtest on historical data.
 
@@ -91,6 +106,7 @@ class Backtester:
             symbol: Trading pair (e.g., BTCUSDT, EURUSD)
             days: Number of days to backtest (max depends on API limits)
             is_crypto: True for crypto (Binance), False for forex (TwelveData)
+            use_smc_filter: If True, skip trades with SMC score < 50
 
         Returns:
             BacktestResult with all statistics
@@ -106,9 +122,11 @@ class Backtester:
         losses = 0
         no_entry = 0
         neutral_days = 0
+        smc_filtered_count = 0
         win_pnls = []
         loss_pnls = []
         all_pnls = []
+        all_smc_scores = []
         consecutive_wins = 0
         consecutive_losses = 0
         max_consec_wins = 0
@@ -277,6 +295,39 @@ class Backtester:
 
                 stop_loss = pivots["R2"]
 
+            # ---- SMC CONFLUENCE FILTER ----
+            # Use candles up to (but not including) current day for SMC analysis
+            lookback = min(i, 15)  # Use up to 15 previous candles
+            smc_candles = candles[max(0, i - lookback):i]
+            
+            smc_score = 0
+            if len(smc_candles) >= 5:
+                smc_analysis = self.smc.analyze(
+                    candles=smc_candles,
+                    current_price=current_open,
+                    bias=bias
+                )
+                smc_score = smc_analysis.confluence_score
+                all_smc_scores.append(smc_score)
+            
+            # Filter: Skip trade if SMC score too low
+            if use_smc_filter and smc_score < SMC_MIN_SCORE:
+                smc_filtered_count += 1
+                trades.append(BacktestTrade(
+                    day=i - 1,
+                    date=current.get("date", f"Day {i-1}"),
+                    symbol=symbol,
+                    bias=bias,
+                    entry_price=entry_price,
+                    entry_type=entry_type,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit,
+                    result="SMC_FILTERED",
+                    smc_score=smc_score,
+                    notes=f"SMC score {smc_score} < {SMC_MIN_SCORE} → skipped"
+                ))
+                continue
+
             # ---- CHECK WIN/LOSS ----
             # Simulate: Did price hit TP or SL first?
             result, pnl_pct = self._check_trade_outcome(
@@ -320,6 +371,7 @@ class Backtester:
                 result=result,
                 pnl_pct=pnl_pct,
                 rr_ratio=rr,
+                smc_score=smc_score,
                 notes=""
             ))
 
@@ -340,6 +392,9 @@ class Backtester:
         rr_values = [t.rr_ratio for t in trades if t.result in ("WIN", "LOSS")]
         avg_rr = sum(rr_values) / len(rr_values) if rr_values else 0
 
+        # Average SMC score
+        avg_smc = sum(all_smc_scores) / len(all_smc_scores) if all_smc_scores else 0
+
         return BacktestResult(
             symbol=symbol,
             total_days=len(candles) - 2,
@@ -348,6 +403,7 @@ class Backtester:
             losses=losses,
             no_entry=no_entry,
             neutral_days=neutral_days,
+            smc_filtered=smc_filtered_count,
             win_rate=win_rate,
             avg_win_pct=avg_win,
             avg_loss_pct=avg_loss,
@@ -357,6 +413,7 @@ class Backtester:
             max_drawdown_pct=max_drawdown,
             profit_factor=profit_factor,
             avg_rr=avg_rr,
+            avg_smc_score=avg_smc,
             trades=trades
         )
 
@@ -573,13 +630,14 @@ class Backtester:
             f"━━━━━━━━━━━━━━━━━━━━━━━━━",
             f"",
             f"⏱️ Period: `{result.total_days} days`",
-            f"📐 Strategy: Quantum Physics Theory",
+            f"📐 Strategy: Quantum + SMC Filter",
             f"",
             f"━━━ *PERFORMANCE* ━━━",
             f"🎯 Win Rate: `{result.win_rate:.1f}%` {grade}",
             f"📊 Total Trades: `{result.total_trades}`",
             f"✅ Wins: `{result.wins}` | ❌ Losses: `{result.losses}`",
             f"⏭️ No Entry: `{result.no_entry}` | ⚖️ Neutral: `{result.neutral_days}`",
+            f"🏦 SMC Filtered: `{result.smc_filtered}` (skipped low confluence)",
             f"",
             f"━━━ *P&L* ━━━",
             f"{pnl_emoji} Total PnL: `{result.total_pnl_pct:+.2f}%`",
@@ -587,6 +645,10 @@ class Backtester:
             f"❌ Avg Loss: `{result.avg_loss_pct:.2f}%`",
             f"📊 Profit Factor: `{result.profit_factor:.2f}`",
             f"📐 Avg R:R: `1:{result.avg_rr:.1f}`",
+            f"",
+            f"━━━ *SMC* ━━━",
+            f"🏦 Avg SMC Score: `{result.avg_smc_score:.0f}/100`",
+            f"🔍 Trades filtered: `{result.smc_filtered}` (score < {SMC_MIN_SCORE})",
             f"",
             f"━━━ *RISK* ━━━",
             f"📉 Max Drawdown: `{result.max_drawdown_pct:.2f}%`",
@@ -605,7 +667,7 @@ class Backtester:
                 emoji = "✅" if t.result == "WIN" else "❌"
                 lines.append(
                     f"  {emoji} {t.date} | {t.bias} @ {t.entry_type} | "
-                    f"`{t.pnl_pct:+.2f}%`"
+                    f"`{t.pnl_pct:+.2f}%` | SMC:{t.smc_score}"
                 )
 
         lines.extend([
@@ -623,5 +685,5 @@ class Backtester:
             f"🎯 {result.symbol}: WR `{result.win_rate:.1f}%` | "
             f"{pnl_emoji} `{result.total_pnl_pct:+.2f}%` | "
             f"Trades: {result.total_trades} ({result.wins}W/{result.losses}L) | "
-            f"{result.total_days}d"
+            f"SMC avg: {result.avg_smc_score:.0f} | {result.total_days}d"
         )

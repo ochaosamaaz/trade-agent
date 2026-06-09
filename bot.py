@@ -461,7 +461,8 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prev_low=data["prev_low"],
         prev_close=data["prev_close"],
         prev_day_high=data["pdh"],
-        prev_day_low=data["pdl"]
+        prev_day_low=data["pdl"],
+        candles=data.get("candles")
     )
 
     pivots = calculate_pivot_points(data["prev_high"], data["prev_low"], data["prev_close"])
@@ -481,8 +482,8 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"  PDL: `{data['pdl']}`"
     )
 
-    # Add quick alert suggestion
-    if signal.entry_levels:
+    # Add quick alert suggestion (only if not SMC-filtered)
+    if signal.entry_levels and not signal.smc_filtered:
         entry_name, entry_price = signal.entry_levels[0]
         if signal.bias == "UP":
             sl_price = pivots["S2"]
@@ -539,7 +540,8 @@ async def forex_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prev_low=data["prev_low"],
         prev_close=data["prev_close"],
         prev_day_high=data["pdh"],
-        prev_day_low=data["pdl"]
+        prev_day_low=data["pdl"],
+        candles=data.get("candles")
     )
 
     pivots = calculate_pivot_points(data["prev_high"], data["prev_low"], data["prev_close"])
@@ -559,8 +561,8 @@ async def forex_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"  PDL: `{data['pdl']}`"
     )
 
-    # Add quick alert suggestion
-    if signal.entry_levels:
+    # Add quick alert suggestion (only if not SMC-filtered)
+    if signal.entry_levels and not signal.smc_filtered:
         entry_name, entry_price = signal.entry_levels[0]
         if signal.bias == "UP":
             sl_price = pivots["S2"]
@@ -825,7 +827,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prev_low=market_data["prev_low"],
             prev_close=market_data["prev_close"],
             prev_day_high=market_data["pdh"],
-            prev_day_low=market_data["pdl"]
+            prev_day_low=market_data["pdl"],
+            candles=market_data.get("candles")
         )
 
         pivots = calculate_pivot_points(
@@ -861,7 +864,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prev_low=market_data["prev_low"],
             prev_close=market_data["prev_close"],
             prev_day_high=market_data["pdh"],
-            prev_day_low=market_data["pdl"]
+            prev_day_low=market_data["pdl"],
+            candles=market_data.get("candles")
         )
 
         pivots = calculate_pivot_points(
