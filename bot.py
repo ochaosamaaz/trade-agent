@@ -36,6 +36,7 @@ from data_fetcher import DataFetcher
 from price_monitor import PriceMonitor
 from alert_manager import AlertManager, AlertStatus
 from backtester import Backtester
+from paper_trader import PaperTrader
 
 # Setup logging
 logging.basicConfig(
@@ -49,6 +50,7 @@ engine = QuantumEngine()
 fetcher = DataFetcher()
 alert_manager: AlertManager = None  # Initialized in post_init
 price_monitor: PriceMonitor = None  # Initialized in post_init
+paper_trader: PaperTrader = None    # Initialized in post_init
 app_instance: Application = None    # Reference to bot app for sending messages
 
 
@@ -741,6 +743,127 @@ async def backtest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
+# ========== PAPER TRADING COMMANDS ==========
+
+async def paperstart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start paper trading. Subscribes this chat to forward test signals."""
+    chat_id = update.effective_chat.id
+
+    if paper_trader.is_subscribed(chat_id):
+        await update.message.reply_text(
+            "✅ Paper trading sudah aktif di chat ini!\n"
+            "Gunakan /paperjournal untuk lihat progress.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Parse optional pairs
+    pairs = None
+    if context.args:
+        pairs = [p.upper() for p in context.args]
+        # Validate
+        valid_pairs = []
+        for p in pairs:
+            if p in CRYPTO_PAIRS or p in FOREX_PAIRS:
+                valid_pairs.append(p)
+        pairs = valid_pairs if valid_pairs else None
+
+    paper_trader.subscribe(chat_id, pairs)
+
+    pair_count = len(pairs) if pairs else len(CRYPTO_PAIRS) + len(FOREX_PAIRS)
+
+    await update.message.reply_text(
+        f"📝 *PAPER TRADING ACTIVATED!*\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🔍 Monitoring: `{pair_count} pairs`\n"
+        f"⏰ Scan: Setiap 6 jam (auto)\n"
+        f"📊 Filter: SMC score >= 50\n\n"
+        f"Bot akan otomatis:\n"
+        f"1️⃣ Scan semua pair → kirim signal\n"
+        f"2️⃣ Cek hasil (TP/SL) keesokan harinya\n"
+        f"3️⃣ Update journal & running stats\n\n"
+        f"🎮 *Commands:*\n"
+        f"• /paperjournal — Lihat journal & stats\n"
+        f"• /paperscan — Force scan sekarang\n"
+        f"• /paperstop — Berhenti paper trading\n\n"
+        f"_Zero risk — validasi strategy sebelum live!_",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def paperstop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stop paper trading for this chat."""
+    chat_id = update.effective_chat.id
+
+    if not paper_trader.is_subscribed(chat_id):
+        await update.message.reply_text("❌ Paper trading belum aktif di chat ini.")
+        return
+
+    paper_trader.unsubscribe(chat_id)
+
+    await update.message.reply_text(
+        "⏹️ Paper trading dihentikan.\n"
+        "Data journal tetap tersimpan.\n"
+        "Gunakan /paperstart untuk aktifkan lagi.",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def paperjournal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show paper trading journal and stats."""
+    journal = paper_trader.get_journal()
+    await update.message.reply_text(journal, parse_mode=ParseMode.MARKDOWN)
+
+
+async def paperscan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Force a paper trading scan now."""
+    chat_id = update.effective_chat.id
+
+    if not paper_trader.is_subscribed(chat_id):
+        await update.message.reply_text(
+            "❌ Aktifkan dulu dengan /paperstart",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    await update.message.reply_text("⏳ Scanning all pairs...")
+
+    # Check open trades first
+    resolved = await paper_trader.check_open_trades()
+    new_trades = await paper_trader.scan_all_pairs()
+
+    # Format response
+    lines = ["📝 *PAPER SCAN COMPLETE*", "━━━━━━━━━━━━━━━━━━━━━━━━━", ""]
+
+    if resolved:
+        lines.append(f"📊 *Resolved ({len(resolved)}):*")
+        for t in resolved:
+            if t.status == "win":
+                lines.append(f"  ✅ {t.symbol} | +{t.pnl_pct:.2f}%")
+            elif t.status == "loss":
+                lines.append(f"  ❌ {t.symbol} | {t.pnl_pct:.2f}%")
+            else:
+                lines.append(f"  ⏭️ {t.symbol} | no hit")
+        lines.append("")
+
+    if new_trades:
+        lines.append(f"🆕 *New Signals ({len(new_trades)}):*")
+        for t in new_trades:
+            emoji = "🟢" if t.bias == "UP" else "🔴"
+            lines.append(
+                f"  {emoji} {t.symbol} | {t.bias} @ {t.entry_type} | SMC:{t.smc_score}"
+            )
+        lines.append("")
+    else:
+        lines.append("📭 Tidak ada signal baru yang memenuhi kriteria SMC")
+        lines.append("")
+
+    lines.append(f"📈 Running WR: `{paper_trader.stats.win_rate:.1f}%`")
+    lines.append(f"💰 Total PnL: `{paper_trader.stats.total_pnl_pct:+.2f}%`")
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
 # ========== QUICK BUTTONS ==========
 
 async def quick_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -878,9 +1001,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ========== LIFECYCLE ==========
 
+async def send_paper_notification(chat_id: int, message: str):
+    """Send paper trading notification to a chat."""
+    if not app_instance:
+        return
+    try:
+        await app_instance.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        logger.error(f"Paper notify error: {e}")
+
+
 async def post_init(application: Application):
     """Called after the application is initialized. Start price monitor."""
-    global alert_manager, price_monitor, app_instance
+    global alert_manager, price_monitor, paper_trader, app_instance
 
     app_instance = application
 
@@ -903,14 +1040,21 @@ async def post_init(application: Application):
     # Start the monitor
     await price_monitor.start()
 
+    # Initialize paper trader
+    paper_trader = PaperTrader(notify_callback=send_paper_notification)
+    await paper_trader.start()
+
     active_count = alert_manager.get_active_count()
-    logger.info(f"✅ Bot initialized | {active_count} active alerts loaded")
+    paper_subs = len(paper_trader.subscribers)
+    logger.info(f"✅ Bot initialized | {active_count} alerts | {paper_subs} paper subs")
 
 
 async def post_shutdown(application: Application):
     """Called when application is shutting down."""
     if price_monitor:
         await price_monitor.stop()
+    if paper_trader:
+        await paper_trader.stop()
     logger.info("👋 Bot shutdown complete")
 
 
@@ -955,6 +1099,10 @@ def main():
     app.add_handler(CommandHandler("myalerts", myalerts_command))
     app.add_handler(CommandHandler("removealert", removealert_command))
     app.add_handler(CommandHandler("backtest", backtest_command))
+    app.add_handler(CommandHandler("paperstart", paperstart_command))
+    app.add_handler(CommandHandler("paperstop", paperstop_command))
+    app.add_handler(CommandHandler("paperjournal", paperjournal_command))
+    app.add_handler(CommandHandler("paperscan", paperscan_command))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Error handler
@@ -964,6 +1112,7 @@ def main():
     print("🚀 Quantum Trading Agent is running!")
     print("📡 Real-time price monitor: ACTIVE")
     print("🔔 Alert system: ACTIVE")
+    print("📝 Paper trading: ACTIVE")
     print("Press Ctrl+C to stop.")
 
     asyncio.run(_run_bot(app))
