@@ -412,9 +412,14 @@ class PaperTrader:
             ]
 
             for t in relevant:
-                emoji = "🟢" if t.bias == "UP" else "🔴"
+                if t.bias == "UP":
+                    emoji = "🟢"
+                    action_label = "BUY"
+                else:
+                    emoji = "🔴"
+                    action_label = "SELL"
                 lines.append(
-                    f"{emoji} *{t.symbol}* | {t.bias} @ {t.entry_type}\n"
+                    f"{emoji} *{t.symbol}* | {action_label} ({t.bias}) @ {t.entry_type}\n"
                     f"   Entry: `{t.entry_price}` | TP: `{t.take_profit}` | SL: `{t.stop_loss}`\n"
                     f"   SMC: `{t.smc_score}/100` | Structure: `{t.smc_structure}`"
                 )
@@ -506,8 +511,13 @@ class PaperTrader:
         if open_trades:
             lines.extend(["", "🔄 *Open Trades:*"])
             for t in open_trades:
-                emoji = "🟢" if t.bias == "UP" else "🔴"
-                lines.append(f"  {emoji} {t.symbol} | {t.bias} @ `{t.entry_price}` | SMC:{t.smc_score}")
+                if t.bias == "UP":
+                    emoji = "🟢"
+                    action_label = "BUY"
+                else:
+                    emoji = "🔴"
+                    action_label = "SELL"
+                lines.append(f"  {emoji} {t.symbol} | {action_label} @ `{t.entry_price}` | SMC:{t.smc_score}")
 
         # Recent closed
         if recent:

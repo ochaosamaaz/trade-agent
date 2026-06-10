@@ -150,11 +150,11 @@ class QuantumEngine:
         if bias == "UP":
             if current_open > pivots["PP"]:
                 notes_parts.append("⚠️ Open > Pivot → PP entry INVALID (sudah di atas)")
-                entry_levels.append(("S1 (Buy Zone)", pivots["S1"]))
+                entry_levels.append(("S1 — BUY Zone", pivots["S1"]))
                 notes_parts.append("✅ S1 masih valid sebagai buy zone")
             else:
-                entry_levels.append(("Pivot (Buy Zone)", pivots["PP"]))
-                entry_levels.append(("S1 (Buy Zone)", pivots["S1"]))
+                entry_levels.append(("Pivot — BUY Zone", pivots["PP"]))
+                entry_levels.append(("S1 — BUY Zone", pivots["S1"]))
                 notes_parts.append("✅ PP dan S1 valid sebagai buy zone")
 
             notes_parts.append(f"🎯 Mission: Sweep PDH ({pdh})")
@@ -163,11 +163,11 @@ class QuantumEngine:
         elif bias == "DOWN":
             if current_open < pivots["PP"]:
                 notes_parts.append("⚠️ Open < Pivot → PP entry INVALID (sudah di bawah)")
-                entry_levels.append(("R1 (Sell Zone)", pivots["R1"]))
+                entry_levels.append(("R1 — SELL Zone", pivots["R1"]))
                 notes_parts.append("✅ R1 masih valid sebagai sell zone")
             else:
-                entry_levels.append(("Pivot (Sell Zone)", pivots["PP"]))
-                entry_levels.append(("R1 (Sell Zone)", pivots["R1"]))
+                entry_levels.append(("Pivot — SELL Zone", pivots["PP"]))
+                entry_levels.append(("R1 — SELL Zone", pivots["R1"]))
                 notes_parts.append("✅ PP dan R1 valid sebagai sell zone")
 
             notes_parts.append(f"🎯 Mission: Sweep PDL ({pdl})")
@@ -204,12 +204,15 @@ class QuantumEngine:
         if signal.bias == "UP":
             bias_emoji = "🟢🔼"
             direction = "BULLISH BIAS"
+            action = "📗 Action: *BUY* (Long)"
         elif signal.bias == "DOWN":
             bias_emoji = "🔴🔽"
             direction = "BEARISH BIAS"
+            action = "📕 Action: *SELL* (Short)"
         else:
             bias_emoji = "⚖️"
             direction = "NEUTRAL"
+            action = "⏸️ Action: *WAIT* (No Trade)"
 
         # SMC quality indicator
         smc_badge = ""
@@ -229,6 +232,7 @@ class QuantumEngine:
             f"━━━━━━━━━━━━━━━━━━━━━━━━━",
             f"",
             f"📐 *Bias:* `{direction}`",
+            f"{action}",
         ]
 
         # SMC signal quality warning
