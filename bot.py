@@ -331,6 +331,11 @@ async def alert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+    # Check alert_manager is ready
+    if not alert_manager:
+        await update.message.reply_text("❌ Alert system belum siap. Coba lagi dalam beberapa detik.")
+        return
+
     # Check user alert limit
     user_id = update.effective_user.id
     user_alerts = alert_manager.get_user_alerts(user_id)
@@ -386,6 +391,10 @@ async def alert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def myalerts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show user's active alerts."""
+    if not alert_manager:
+        await update.message.reply_text("❌ Alert system belum siap.")
+        return
+
     user_id = update.effective_user.id
     alerts = alert_manager.get_user_alerts(user_id)
 
@@ -399,6 +408,10 @@ async def myalerts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def removealert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Remove an alert. Usage: /removealert <alert_id>"""
+    if not alert_manager:
+        await update.message.reply_text("❌ Alert system belum siap.")
+        return
+
     if not context.args:
         await update.message.reply_text(
             "❌ Masukkan ID alert! Contoh: `/removealert A17000001`\n"
@@ -1141,36 +1154,48 @@ def main():
 
 async def _run_bot(app: Application):
     """Run the bot using asyncio.run() for Python 3.12+ compatibility."""
-    async with app:
-        await app.start()
-        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        
-        # Keep running until interrupted
-        stop_event = asyncio.Event()
-        
-        import signal as sig
-        import sys
-        
-        def _stop(*args):
-            stop_event.set()
-        
-        if sys.platform != "win32":
-            loop = asyncio.get_running_loop()
-            loop.add_signal_handler(sig.SIGINT, _stop)
-            loop.add_signal_handler(sig.SIGTERM, _stop)
-        else:
-            # Windows: signal handling via thread
-            sig.signal(sig.SIGINT, _stop)
-            sig.signal(sig.SIGTERM, _stop)
-        
-        try:
-            await stop_event.wait()
-        except (KeyboardInterrupt, SystemExit):
-            pass
-        finally:
-            print("\n👋 Shutting down...")
-            await app.updater.stop()
-            await app.stop()
+    global alert_manager, price_monitor, paper_trader, app_instance
+
+    # Manually initialize if post_init wasn't called
+    try:
+        async with app:
+            # Ensure post_init ran (check alert_manager)
+            if not alert_manager:
+                logger.info("⚠️ post_init didn't run, initializing manually...")
+                await post_init(app)
+
+            await app.start()
+            await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+
+            # Keep running until interrupted
+            stop_event = asyncio.Event()
+
+            import signal as sig
+            import sys
+
+            def _stop(*args):
+                stop_event.set()
+
+            if sys.platform != "win32":
+                loop = asyncio.get_running_loop()
+                loop.add_signal_handler(sig.SIGINT, _stop)
+                loop.add_signal_handler(sig.SIGTERM, _stop)
+            else:
+                # Windows: signal handling via thread
+                sig.signal(sig.SIGINT, _stop)
+                sig.signal(sig.SIGTERM, _stop)
+
+            try:
+                await stop_event.wait()
+            except (KeyboardInterrupt, SystemExit):
+                pass
+            finally:
+                print("\n👋 Shutting down...")
+                await app.updater.stop()
+                await app.stop()
+    except Exception as e:
+        logger.error(f"Bot run error: {e}")
+        raise
 
 
 if __name__ == "__main__":
