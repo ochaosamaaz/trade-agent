@@ -37,6 +37,8 @@ from price_monitor import PriceMonitor
 from alert_manager import AlertManager, AlertStatus
 from backtester import Backtester
 from paper_trader import PaperTrader
+from daily_scanner import DailyScanner
+from risk_manager import RiskManager
 
 # Setup logging
 logging.basicConfig(
@@ -48,9 +50,11 @@ logger = logging.getLogger(__name__)
 # Initialize components
 engine = QuantumEngine()
 fetcher = DataFetcher()
+risk_manager = RiskManager()
 alert_manager: AlertManager = None  # Initialized in post_init
 price_monitor: PriceMonitor = None  # Initialized in post_init
 paper_trader: PaperTrader = None    # Initialized in post_init
+daily_scanner: DailyScanner = None  # Initialized in post_init
 app_instance: Application = None    # Reference to bot app for sending messages
 
 
@@ -918,6 +922,167 @@ async def paperscan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
+# ========== DAILY SCAN & RISK COMMANDS ==========
+
+async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Force a daily scan now. Usage: /scan"""
+    if not daily_scanner:
+        await update.message.reply_text("❌ Daily scanner tidak tersedia.")
+        return
+
+    await update.message.reply_text("⏳ Scanning semua pairs... mohon tunggu.")
+
+    message = await daily_scanner.run_daily_scan()
+    # Send to this chat directly (in case not subscribed)
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+
+async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Subscribe this chat to daily auto-broadcast. Usage: /subscribe"""
+    if not daily_scanner:
+        await update.message.reply_text("❌ Daily scanner tidak tersedia.")
+        return
+
+    chat_id = update.effective_chat.id
+    daily_scanner.add_subscriber(chat_id)
+
+    from config import DAILY_SCAN_HOUR, DAILY_SCAN_MINUTE
+    wib_hour = (DAILY_SCAN_HOUR + 7) % 24
+
+    await update.message.reply_text(
+        f"✅ *SUBSCRIBED — Daily Auto-Scan*\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"Chat ini akan menerima broadcast signal otomatis:\n"
+        f"⏰ Setiap hari jam `{DAILY_SCAN_HOUR:02d}:{DAILY_SCAN_MINUTE:02d} UTC` "
+        f"(`{wib_hour:02d}:{DAILY_SCAN_MINUTE:02d} WIB`)\n"
+        f"📊 Semua pair (crypto + forex)\n"
+        f"🏦 Hanya signal yang lolos SMC filter\n"
+        f"📐 Termasuk position sizing\n\n"
+        f"🎮 Commands:\n"
+        f"• /scan — Force scan sekarang\n"
+        f"• /unsubscribe — Berhenti broadcast\n"
+        f"• /setrisk — Atur risk management",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def unsubscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Unsubscribe from daily broadcast."""
+    if not daily_scanner:
+        await update.message.reply_text("❌ Daily scanner tidak tersedia.")
+        return
+
+    chat_id = update.effective_chat.id
+    daily_scanner.remove_subscriber(chat_id)
+    await update.message.reply_text("✅ Unsubscribed dari daily broadcast.")
+
+
+async def setrisk_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Set risk management parameters.
+    Usage: /setrisk <balance> <risk_pct>
+    Example: /setrisk 1000 1.5
+    """
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text(
+            "📐 *RISK MANAGEMENT — Setup*\n"
+            "`/setrisk <BALANCE_USD> <RISK_%>`\n\n"
+            "*Contoh:*\n"
+            "`/setrisk 1000 1` — Balance $1000, risk 1%/trade\n"
+            "`/setrisk 5000 0.5` — Balance $5000, risk 0.5%/trade\n"
+            "`/setrisk 500 2` — Balance $500, risk 2%/trade\n\n"
+            f"*Saat ini:*\n"
+            f"💰 Balance: `${risk_manager.balance:,.2f}`\n"
+            f"⚠️ Risk: `{risk_manager.risk_pct}%` = `${risk_manager.balance * risk_manager.risk_pct / 100:.2f}`/trade\n"
+            f"⚡ Leverage: `{risk_manager.leverage}x`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    try:
+        balance = float(context.args[0])
+        risk_pct = float(context.args[1])
+    except ValueError:
+        await update.message.reply_text("❌ Harus angka! Contoh: `/setrisk 1000 1.5`",
+                                         parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if balance < 10:
+        await update.message.reply_text("❌ Balance minimal $10")
+        return
+    if risk_pct < 0.1 or risk_pct > 5:
+        await update.message.reply_text("❌ Risk harus antara 0.1% - 5%")
+        return
+
+    risk_manager.update_balance(balance)
+    risk_manager.update_risk(risk_pct)
+
+    # Also update daily scanner's risk manager
+    if daily_scanner:
+        daily_scanner.risk_manager.update_balance(balance)
+        daily_scanner.risk_manager.update_risk(risk_pct)
+
+    risk_per_trade = balance * risk_pct / 100
+
+    await update.message.reply_text(
+        f"✅ *RISK UPDATED*\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💰 Balance: `${balance:,.2f}`\n"
+        f"⚠️ Risk/trade: `{risk_pct}%` = `${risk_per_trade:.2f}`\n"
+        f"⚡ Leverage: `{risk_manager.leverage}x`\n\n"
+        f"Setiap signal sekarang akan include position size\n"
+        f"berdasarkan setting ini.",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def calcsize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Calculate position size.
+    Usage: /calcsize <PAIR> <long/short> <ENTRY> <SL> <TP>
+    """
+    if not context.args or len(context.args) < 5:
+        await update.message.reply_text(
+            "📐 *POSITION SIZE CALCULATOR*\n"
+            "`/calcsize <PAIR> <long/short> <ENTRY> <SL> <TP>`\n\n"
+            "*Contoh:*\n"
+            "`/calcsize BTCUSDT long 67000 66000 69000`\n"
+            "`/calcsize XAUUSD short 4300 4350 4200`\n"
+            "`/calcsize EURUSD long 1.0850 1.0800 1.0950`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    try:
+        symbol = context.args[0].upper()
+        direction = context.args[1].lower()
+        entry = float(context.args[2])
+        sl = float(context.args[3])
+        tp = float(context.args[4])
+    except (ValueError, IndexError):
+        await update.message.reply_text("❌ Format salah!")
+        return
+
+    is_crypto = symbol in CRYPTO_PAIRS
+    is_forex = symbol in FOREX_PAIRS
+
+    if not is_crypto and not is_forex:
+        await update.message.reply_text(f"❌ Pair `{symbol}` tidak didukung.", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    pos = risk_manager.calculate_position_size(
+        entry_price=entry,
+        stop_loss=sl,
+        take_profit=tp,
+        symbol=symbol,
+        direction=direction,
+        is_crypto=is_crypto
+    )
+
+    message = RiskManager.format_position_size(pos, is_crypto)
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+
 # ========== QUICK BUTTONS ==========
 
 async def quick_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1103,6 +1268,13 @@ async def post_init(application: Application):
     except Exception as e:
         logger.error(f"Paper trader init error: {e}")
 
+    # Initialize daily scanner
+    try:
+        daily_scanner = DailyScanner(notify_callback=send_paper_notification)
+        await daily_scanner.start()
+    except Exception as e:
+        logger.error(f"Daily scanner init error: {e}")
+
     active_count = alert_manager.get_active_count()
     paper_subs = len(paper_trader.subscribers) if paper_trader else 0
     logger.info(f"✅ Bot initialized | {active_count} alerts | {paper_subs} paper subs")
@@ -1114,6 +1286,8 @@ async def post_shutdown(application: Application):
         await price_monitor.stop()
     if paper_trader:
         await paper_trader.stop()
+    if daily_scanner:
+        await daily_scanner.stop()
     logger.info("👋 Bot shutdown complete")
 
 
@@ -1162,6 +1336,11 @@ def main():
     app.add_handler(CommandHandler("paperstop", paperstop_command))
     app.add_handler(CommandHandler("paperjournal", paperjournal_command))
     app.add_handler(CommandHandler("paperscan", paperscan_command))
+    app.add_handler(CommandHandler("scan", scan_command))
+    app.add_handler(CommandHandler("subscribe", subscribe_command))
+    app.add_handler(CommandHandler("unsubscribe", unsubscribe_command))
+    app.add_handler(CommandHandler("setrisk", setrisk_command))
+    app.add_handler(CommandHandler("calcsize", calcsize_command))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Error handler
