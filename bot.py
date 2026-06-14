@@ -89,7 +89,7 @@ async def on_price_update(symbol: str, price: float):
 # ========== COMMAND HANDLERS ==========
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Welcome message with bot introduction."""
+    """Welcome message with bot introduction + main menu buttons."""
     welcome = (
         "🤖 *CIEL AGENT — AI Trading Bot*\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -101,38 +101,41 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📐 *Strategy:*\n"
         "• Open < Prev Open → 📕 SELL (Sweep PDL)\n"
         "• Open > Prev Open → 📗 BUY (Sweep PDH)\n"
-        "• Entry di Pivot zones + SMC confluence filter\n"
+        "• Entry di Pivot + SMC confluence filter\n"
         "\n"
-        "━━━ *SIGNAL & ANALISIS* ━━━\n"
-        "• /crypto `BTCUSDT` — Signal crypto\n"
-        "• /forex `EURUSD` — Signal forex\n"
-        "• /price `BTCUSDT` — Harga real-time\n"
-        "• /quick — Quick buttons\n"
+        "👇 *Pilih menu di bawah untuk mulai:*\n"
         "\n"
-        "━━━ *ALERT SYSTEM* ━━━\n"
-        "• /alert — Set SL/TP (auto-notif)\n"
-        "• /myalerts — Lihat alert aktif\n"
-        "• /removealert — Hapus alert\n"
-        "\n"
-        "━━━ *PAPER TRADING* ━━━\n"
-        "• /paperstart — Mulai forward test\n"
-        "• /paperjournal — Lihat journal & stats\n"
-        "• /paperscan — Force scan sekarang\n"
-        "• /paperstop — Stop paper trading\n"
-        "\n"
-        "━━━ *TOOLS* ━━━\n"
-        "• /backtest `BTCUSDT 90` — Cek win rate\n"
-        "• /pivot `H L C` — Hitung pivot manual\n"
-        "• /manual — Input data manual\n"
-        "• /list — Daftar pair tersedia\n"
-        "• /help — Bantuan lengkap\n"
-        "\n"
-        "⚡ Mulai: /crypto BTCUSDT atau /forex EURUSD\n"
-        "\n"
-        "⚠️ _Disclaimer: Bukan financial advice. Always DYOR!_\n"
+        "⚠️ _Bukan financial advice. Always DYOR!_\n"
         "_Powered by Ciel Agent v2.0_"
     )
-    await update.message.reply_text(welcome, parse_mode=ParseMode.MARKDOWN)
+
+    keyboard = [
+        [
+            InlineKeyboardButton("📊 Signal Crypto", callback_data="menu_crypto"),
+            InlineKeyboardButton("💱 Signal Forex", callback_data="menu_forex"),
+        ],
+        [
+            InlineKeyboardButton("📡 Scan All Pairs", callback_data="menu_scan"),
+            InlineKeyboardButton("💰 Cek Harga", callback_data="menu_price"),
+        ],
+        [
+            InlineKeyboardButton("🔔 Alert System", callback_data="menu_alert"),
+            InlineKeyboardButton("📝 Paper Trading", callback_data="menu_paper"),
+        ],
+        [
+            InlineKeyboardButton("📐 Risk Calculator", callback_data="menu_risk"),
+            InlineKeyboardButton("🧪 Backtest", callback_data="menu_backtest"),
+        ],
+        [
+            InlineKeyboardButton("📖 Tutorial", callback_data="menu_tutorial"),
+            InlineKeyboardButton("❓ Help", callback_data="menu_help"),
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        welcome, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1083,6 +1086,31 @@ async def calcsize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
+# ========== TUTORIAL COMMAND ==========
+
+async def tutorial_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show interactive tutorial with buttons."""
+    keyboard = [
+        [InlineKeyboardButton("1️⃣ Cara Baca Signal", callback_data="tut_signal")],
+        [InlineKeyboardButton("2️⃣ Cara Pasang Alert", callback_data="tut_alert")],
+        [InlineKeyboardButton("3️⃣ Paper Trading", callback_data="tut_paper")],
+        [InlineKeyboardButton("4️⃣ Risk Management", callback_data="tut_risk")],
+        [InlineKeyboardButton("5️⃣ Daily Auto-Scan", callback_data="tut_scan")],
+        [InlineKeyboardButton("6️⃣ Backtest Strategy", callback_data="tut_backtest")],
+        [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "📖 *TUTORIAL — CIEL AGENT*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Pilih topik yang ingin dipelajari:\n",
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
 # ========== QUICK BUTTONS ==========
 
 async def quick_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1125,7 +1153,443 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data
 
-    if data.startswith("price_"):
+    # ===== MAIN MENU CALLBACKS =====
+    if data == "menu_main":
+        keyboard = [
+            [
+                InlineKeyboardButton("📊 Signal Crypto", callback_data="menu_crypto"),
+                InlineKeyboardButton("💱 Signal Forex", callback_data="menu_forex"),
+            ],
+            [
+                InlineKeyboardButton("📡 Scan All", callback_data="menu_scan"),
+                InlineKeyboardButton("💰 Cek Harga", callback_data="menu_price"),
+            ],
+            [
+                InlineKeyboardButton("🔔 Alert", callback_data="menu_alert"),
+                InlineKeyboardButton("📝 Paper Trade", callback_data="menu_paper"),
+            ],
+            [
+                InlineKeyboardButton("📐 Risk Calc", callback_data="menu_risk"),
+                InlineKeyboardButton("🧪 Backtest", callback_data="menu_backtest"),
+            ],
+            [
+                InlineKeyboardButton("📖 Tutorial", callback_data="menu_tutorial"),
+                InlineKeyboardButton("❓ Help", callback_data="menu_help"),
+            ],
+        ]
+        await query.edit_message_text(
+            "🤖 *CIEL AGENT — Main Menu*\n\n👇 Pilih menu:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "menu_crypto":
+        keyboard = [
+            [
+                InlineKeyboardButton("🪙 BTC", callback_data="crypto_BTCUSDT"),
+                InlineKeyboardButton("🪙 ETH", callback_data="crypto_ETHUSDT"),
+                InlineKeyboardButton("🪙 SOL", callback_data="crypto_SOLUSDT"),
+            ],
+            [
+                InlineKeyboardButton("🪙 BNB", callback_data="crypto_BNBUSDT"),
+                InlineKeyboardButton("🪙 XRP", callback_data="crypto_XRPUSDT"),
+                InlineKeyboardButton("🪙 DOGE", callback_data="crypto_DOGEUSDT"),
+            ],
+            [
+                InlineKeyboardButton("🪙 ADA", callback_data="crypto_ADAUSDT"),
+                InlineKeyboardButton("🪙 AVAX", callback_data="crypto_AVAXUSDT"),
+                InlineKeyboardButton("🪙 DOT", callback_data="crypto_DOTUSDT"),
+            ],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+        ]
+        await query.edit_message_text(
+            "📊 *Signal Crypto* — Pilih pair:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "menu_forex":
+        keyboard = [
+            [
+                InlineKeyboardButton("💱 EURUSD", callback_data="forex_EURUSD"),
+                InlineKeyboardButton("💱 GBPUSD", callback_data="forex_GBPUSD"),
+            ],
+            [
+                InlineKeyboardButton("💱 USDJPY", callback_data="forex_USDJPY"),
+                InlineKeyboardButton("💱 XAUUSD", callback_data="forex_XAUUSD"),
+            ],
+            [
+                InlineKeyboardButton("💱 AUDUSD", callback_data="forex_AUDUSD"),
+                InlineKeyboardButton("💱 EURJPY", callback_data="forex_EURJPY"),
+            ],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+        ]
+        await query.edit_message_text(
+            "💱 *Signal Forex* — Pilih pair:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "menu_price":
+        keyboard = [
+            [
+                InlineKeyboardButton("💰 BTC", callback_data="price_BTCUSDT"),
+                InlineKeyboardButton("💰 ETH", callback_data="price_ETHUSDT"),
+                InlineKeyboardButton("💰 SOL", callback_data="price_SOLUSDT"),
+            ],
+            [
+                InlineKeyboardButton("💰 XAU", callback_data="price_XAUUSD"),
+                InlineKeyboardButton("💰 EUR", callback_data="price_EURUSD"),
+                InlineKeyboardButton("💰 GBP", callback_data="price_GBPUSD"),
+            ],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+        ]
+        await query.edit_message_text(
+            "💰 *Cek Harga Real-time* — Pilih pair:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "menu_scan":
+        await query.edit_message_text("⏳ Scanning semua pairs...")
+        if daily_scanner:
+            message = await daily_scanner.run_daily_scan()
+            await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN)
+        else:
+            await query.edit_message_text("❌ Scanner tidak tersedia. Gunakan /scan")
+
+    elif data == "menu_alert":
+        keyboard = [
+            [InlineKeyboardButton("📋 My Alerts", callback_data="action_myalerts")],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+        ]
+        await query.edit_message_text(
+            "🔔 *ALERT SYSTEM*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Set alert dan bot kirim notifikasi otomatis saat SL/TP tercapai.\n\n"
+            "*Cara pasang:*\n"
+            "`/alert BTCUSDT long 67000 66000 69000`\n\n"
+            "*Format:*\n"
+            "`/alert <PAIR> <long/short> <ENTRY> <SL> <TP>`\n\n"
+            "*Manage:*\n"
+            "• /myalerts — Lihat alert aktif\n"
+            "• /removealert `ID` — Hapus alert",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "action_myalerts":
+        if alert_manager:
+            user_id = query.from_user.id
+            alerts = alert_manager.get_user_alerts(user_id)
+            message = alert_manager.format_alert_list(alerts)
+        else:
+            message = "❌ Alert system belum siap."
+        keyboard = [[InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")]]
+        await query.edit_message_text(
+            message, reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "menu_paper":
+        keyboard = [
+            [InlineKeyboardButton("▶️ Start Paper", callback_data="action_paperstart")],
+            [InlineKeyboardButton("📋 Journal", callback_data="action_paperjournal")],
+            [InlineKeyboardButton("📡 Force Scan", callback_data="action_paperscan")],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+        ]
+        await query.edit_message_text(
+            "📝 *PAPER TRADING*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Forward test strategy tanpa risiko real money.\n"
+            "Bot otomatis scan, catat signal, cek hasil keesokan hari.\n\n"
+            "Pilih action:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "action_paperstart":
+        if paper_trader:
+            chat_id = query.message.chat_id
+            paper_trader.subscribe(chat_id)
+            await query.edit_message_text(
+                "✅ Paper trading AKTIF!\n\nBot akan scan & kirim signal otomatis.\n"
+                "Cek progress: /paperjournal",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await query.edit_message_text("❌ Paper trader tidak tersedia.")
+
+    elif data == "action_paperjournal":
+        if paper_trader:
+            journal = paper_trader.get_journal()
+        else:
+            journal = "❌ Paper trader tidak tersedia."
+        keyboard = [[InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")]]
+        await query.edit_message_text(
+            journal, reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "action_paperscan":
+        if paper_trader:
+            await query.edit_message_text("⏳ Scanning...")
+            await paper_trader.check_open_trades()
+            new_trades = await paper_trader.scan_all_pairs()
+            msg = f"✅ Scan selesai! {len(new_trades)} signal baru."
+            await query.edit_message_text(msg)
+        else:
+            await query.edit_message_text("❌ Paper trader tidak tersedia.")
+
+    elif data == "menu_risk":
+        keyboard = [[InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")]]
+        await query.edit_message_text(
+            "📐 *RISK MANAGEMENT*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"💰 Balance: `${risk_manager.balance:,.2f}`\n"
+            f"⚠️ Risk/trade: `{risk_manager.risk_pct}%` = "
+            f"`${risk_manager.balance * risk_manager.risk_pct / 100:.2f}`\n"
+            f"⚡ Leverage: `{risk_manager.leverage}x`\n\n"
+            "*Commands:*\n"
+            "`/setrisk 1000 1` — Set balance & risk %\n"
+            "`/calcsize BTCUSDT long 67000 66000 69000`\n\n"
+            "_Position size otomatis dihitung di setiap signal._",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "menu_backtest":
+        keyboard = [
+            [
+                InlineKeyboardButton("🪙 BTC 30d", callback_data="bt_BTCUSDT_30"),
+                InlineKeyboardButton("🪙 ETH 30d", callback_data="bt_ETHUSDT_30"),
+            ],
+            [
+                InlineKeyboardButton("💱 XAU 60d", callback_data="bt_XAUUSD_60"),
+                InlineKeyboardButton("💱 EUR 60d", callback_data="bt_EURUSD_60"),
+            ],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+        ]
+        await query.edit_message_text(
+            "🧪 *BACKTEST*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Cek win rate strategy pada data historis.\n\n"
+            "Pilih pair, atau ketik manual:\n"
+            "`/backtest BTCUSDT 90`\n\n"
+            "Quick backtest:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data.startswith("bt_"):
+        parts = data.replace("bt_", "").split("_")
+        symbol = parts[0]
+        days = int(parts[1])
+        is_crypto = symbol in CRYPTO_PAIRS
+        await query.edit_message_text(f"⏳ Backtest {symbol} {days} hari...")
+        bt = Backtester()
+        result = await bt.run_backtest(symbol, days, is_crypto)
+        if result:
+            message = Backtester.format_result(result)
+        else:
+            message = f"❌ Gagal backtest {symbol}"
+        await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN)
+
+    elif data == "menu_tutorial":
+        keyboard = [
+            [InlineKeyboardButton("1️⃣ Cara Baca Signal", callback_data="tut_signal")],
+            [InlineKeyboardButton("2️⃣ Cara Pasang Alert", callback_data="tut_alert")],
+            [InlineKeyboardButton("3️⃣ Paper Trading", callback_data="tut_paper")],
+            [InlineKeyboardButton("4️⃣ Risk Management", callback_data="tut_risk")],
+            [InlineKeyboardButton("5️⃣ Daily Auto-Scan", callback_data="tut_scan")],
+            [InlineKeyboardButton("6️⃣ Backtest Strategy", callback_data="tut_backtest")],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")],
+        ]
+        await query.edit_message_text(
+            "📖 *TUTORIAL — CIEL AGENT*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Pilih topik yang ingin dipelajari:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "menu_help":
+        keyboard = [[InlineKeyboardButton("🔙 Main Menu", callback_data="menu_main")]]
+        await query.edit_message_text(
+            "❓ *SEMUA COMMANDS*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "*Signal:* /crypto, /forex, /price, /quick\n"
+            "*Alert:* /alert, /myalerts, /removealert\n"
+            "*Paper:* /paperstart, /paperstop, /paperjournal, /paperscan\n"
+            "*Scan:* /scan, /subscribe, /unsubscribe\n"
+            "*Risk:* /setrisk, /calcsize\n"
+            "*Tools:* /backtest, /pivot, /manual, /list\n"
+            "*Info:* /start, /help, /tutorial",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    # ===== TUTORIAL CALLBACKS =====
+    elif data == "tut_signal":
+        keyboard = [[InlineKeyboardButton("🔙 Tutorial Menu", callback_data="menu_tutorial")]]
+        await query.edit_message_text(
+            "1️⃣ *CARA BACA SIGNAL*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "*Contoh signal:*\n"
+            "```\n"
+            "🟢🔼 QUANTUM SIGNAL — BTCUSDT\n"
+            "📐 Bias: BULLISH BIAS\n"
+            "📗 Action: BUY (Long)\n"
+            "\n"
+            "🎯 Entry Levels:\n"
+            "  → Pivot — BUY Zone: 67123\n"
+            "  → S1 — BUY Zone: 66890\n"
+            "\n"
+            "🛡️ Invalidation: Below S2 (66500)\n"
+            "🏁 Target: PDH: 67890\n"
+            "```\n\n"
+            "*Penjelasan:*\n"
+            "• 📗 BUY = Beli | 📕 SELL = Jual\n"
+            "• Entry = Harga masuk posisi\n"
+            "• Invalidation = Kalau kena level ini, signal batal\n"
+            "• Target = Take Profit\n"
+            "• SMC Score = Kualitas signal (0-100)\n\n"
+            "*Cara pakai:*\n"
+            "1. Ketik `/crypto BTCUSDT` atau `/forex XAUUSD`\n"
+            "2. Baca bias (BUY/SELL)\n"
+            "3. Entry di level yang ditunjukkan\n"
+            "4. Pasang SL & TP sesuai",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "tut_alert":
+        keyboard = [[InlineKeyboardButton("🔙 Tutorial Menu", callback_data="menu_tutorial")]]
+        await query.edit_message_text(
+            "2️⃣ *CARA PASANG ALERT*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Alert = Bot kirim notifikasi saat harga kena SL/TP.\n\n"
+            "*Step 1:* Dapatkan signal\n"
+            "`/crypto BTCUSDT`\n\n"
+            "*Step 2:* Copy Quick Alert dari signal, atau ketik:\n"
+            "`/alert BTCUSDT long 67000 66000 69000`\n\n"
+            "*Format:*\n"
+            "`/alert <PAIR> <long/short> <ENTRY> <SL> <TP>`\n\n"
+            "• `long` = BUY (TP di atas, SL di bawah)\n"
+            "• `short` = SELL (TP di bawah, SL di atas)\n\n"
+            "*Step 3:* Tunggu notifikasi!\n"
+            "🎯 TP Hit → \"PROFIT +2.5%!\"\n"
+            "🛑 SL Hit → \"LOSS -1.0%\"\n\n"
+            "*Manage:*\n"
+            "• /myalerts — Lihat semua alert\n"
+            "• /removealert `ID` — Hapus alert",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "tut_paper":
+        keyboard = [[InlineKeyboardButton("🔙 Tutorial Menu", callback_data="menu_tutorial")]]
+        await query.edit_message_text(
+            "3️⃣ *PAPER TRADING (FORWARD TEST)*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Test strategy pakai data real TANPA uang asli.\n\n"
+            "*Cara pakai:*\n"
+            "1. `/paperstart` — Aktifkan\n"
+            "2. Bot otomatis scan tiap 6 jam\n"
+            "3. Kirim signal baru yang lolos SMC filter\n"
+            "4. Keesokan hari cek apakah TP/SL kena\n"
+            "5. `/paperjournal` — Lihat running win rate\n\n"
+            "*Kenapa penting?*\n"
+            "• Validasi strategy sebelum pakai uang real\n"
+            "• Lihat actual win rate di market live\n"
+            "• Bangun confidence sebelum go live\n\n"
+            "*Target:*\n"
+            "Jalankan minimal 2-4 minggu.\n"
+            "Kalau WR > 50% dan PF > 1.5 → siap live!",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "tut_risk":
+        keyboard = [[InlineKeyboardButton("🔙 Tutorial Menu", callback_data="menu_tutorial")]]
+        await query.edit_message_text(
+            "4️⃣ *RISK MANAGEMENT*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "JANGAN pernah risk lebih dari 1-2% per trade!\n\n"
+            "*Setup:*\n"
+            "`/setrisk 1000 1`\n"
+            "→ Balance $1000, risk 1% = $10 per trade\n\n"
+            "*Hitung position size:*\n"
+            "`/calcsize BTCUSDT long 67000 66000 69000`\n"
+            "→ Bot hitung berapa lot/qty yang aman\n\n"
+            "*Rules:*\n"
+            "• Risk 1% = Konservatif (recommended)\n"
+            "• Risk 2% = Moderate\n"
+            "• Risk 3%+ = Agresif (berbahaya!)\n\n"
+            "*Contoh:*\n"
+            "Balance $1000, risk 1%:\n"
+            "• Max loss per trade = $10\n"
+            "• Kalau SL 1000 pips dari entry\n"
+            "• Maka size = $10 / 1000 = 0.01 lot\n\n"
+            "_Signal dari /scan sudah include position size otomatis!_",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "tut_scan":
+        keyboard = [[InlineKeyboardButton("🔙 Tutorial Menu", callback_data="menu_tutorial")]]
+        await query.edit_message_text(
+            "5️⃣ *DAILY AUTO-SCAN*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Bot scan SEMUA pairs otomatis tiap hari!\n\n"
+            "*Setup:*\n"
+            "1. `/subscribe` — Daftar broadcast\n"
+            "2. Setiap jam 07:05 WIB, bot kirim signal\n"
+            "3. Hanya signal yang lolos SMC filter\n"
+            "4. Include position size & risk amount\n\n"
+            "*Manual scan:*\n"
+            "`/scan` — Force scan sekarang\n\n"
+            "*Output-nya:*\n"
+            "• List semua BUY signals\n"
+            "• List semua SELL signals\n"
+            "• Entry, TP, SL, R:R, SMC score\n"
+            "• Position size berdasarkan risk setting\n\n"
+            "*Stop:*\n"
+            "`/unsubscribe` — Berhenti broadcast",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "tut_backtest":
+        keyboard = [[InlineKeyboardButton("🔙 Tutorial Menu", callback_data="menu_tutorial")]]
+        await query.edit_message_text(
+            "6️⃣ *BACKTEST STRATEGY*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Cek performa strategy di data historis.\n\n"
+            "*Cara pakai:*\n"
+            "`/backtest BTCUSDT 90`\n"
+            "→ Test BTCUSDT 90 hari terakhir\n\n"
+            "`/backtest XAUUSD 60`\n"
+            "→ Test XAUUSD 60 hari\n\n"
+            "*Yang ditampilkan:*\n"
+            "• Win Rate (%)\n"
+            "• Total PnL (%)\n"
+            "• Profit Factor\n"
+            "• Max Drawdown\n"
+            "• R:R ratio\n"
+            "• SMC filter stats\n"
+            "• Trade log (last 5)\n\n"
+            "*Interpretasi:*\n"
+            "• WR > 50% + PF > 1.5 = Good\n"
+            "• WR > 60% = Excellent\n"
+            "• WR < 40% = Perlu evaluasi\n\n"
+            "_Catatan: Backtest ≠ future results!_",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    # ===== PRICE CALLBACKS =====
+    elif data.startswith("price_"):
         # Quick price check
         symbol = data.replace("price_", "")
         is_crypto = symbol in CRYPTO_PAIRS
@@ -1341,6 +1805,7 @@ def main():
     app.add_handler(CommandHandler("unsubscribe", unsubscribe_command))
     app.add_handler(CommandHandler("setrisk", setrisk_command))
     app.add_handler(CommandHandler("calcsize", calcsize_command))
+    app.add_handler(CommandHandler("tutorial", tutorial_command))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Error handler
