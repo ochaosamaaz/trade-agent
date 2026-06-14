@@ -19,7 +19,7 @@ Commands:
 
 import logging
 import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     ContextTypes, MessageHandler, filters
@@ -89,7 +89,7 @@ async def on_price_update(symbol: str, price: float):
 # ========== COMMAND HANDLERS ==========
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Welcome message with bot introduction + main menu buttons."""
+    """Welcome message with bot introduction + persistent bottom keyboard."""
     welcome = (
         "🤖 *CIEL AGENT — AI Trading Bot*\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -103,35 +103,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Open > Prev Open → 📗 BUY (Sweep PDH)\n"
         "• Entry di Pivot + SMC confluence filter\n"
         "\n"
-        "👇 *Pilih menu di bawah untuk mulai:*\n"
+        "👇 *Gunakan tombol di bawah untuk navigasi:*\n"
         "\n"
         "⚠️ _Bukan financial advice. Always DYOR!_\n"
         "_Powered by Ciel Agent v2.0_"
     )
 
-    keyboard = [
-        [
-            InlineKeyboardButton("📊 Signal Crypto", callback_data="menu_crypto"),
-            InlineKeyboardButton("💱 Signal Forex", callback_data="menu_forex"),
-        ],
-        [
-            InlineKeyboardButton("📡 Scan All Pairs", callback_data="menu_scan"),
-            InlineKeyboardButton("💰 Cek Harga", callback_data="menu_price"),
-        ],
-        [
-            InlineKeyboardButton("🔔 Alert System", callback_data="menu_alert"),
-            InlineKeyboardButton("📝 Paper Trading", callback_data="menu_paper"),
-        ],
-        [
-            InlineKeyboardButton("📐 Risk Calculator", callback_data="menu_risk"),
-            InlineKeyboardButton("🧪 Backtest", callback_data="menu_backtest"),
-        ],
-        [
-            InlineKeyboardButton("📖 Tutorial", callback_data="menu_tutorial"),
-            InlineKeyboardButton("❓ Help", callback_data="menu_help"),
-        ],
+    # Persistent reply keyboard (appears at bottom of chat)
+    reply_keyboard = [
+        ["📊 Signal Crypto", "💱 Signal Forex"],
+        ["📡 Scan All", "💰 Cek Harga"],
+        ["🔔 Alert", "📝 Paper Trade"],
+        ["📐 Risk", "🧪 Backtest"],
+        ["📖 Tutorial", "❓ Help"],
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = ReplyKeyboardMarkup(
+        reply_keyboard, resize_keyboard=True, is_persistent=True
+    )
 
     await update.message.reply_text(
         welcome, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN
@@ -1682,6 +1670,184 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
+# ========== REPLY KEYBOARD HANDLER ==========
+
+async def handle_keyboard_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text messages from the persistent reply keyboard."""
+    text = update.message.text
+
+    if text == "📊 Signal Crypto":
+        keyboard = [
+            [
+                InlineKeyboardButton("🪙 BTC", callback_data="crypto_BTCUSDT"),
+                InlineKeyboardButton("🪙 ETH", callback_data="crypto_ETHUSDT"),
+                InlineKeyboardButton("🪙 SOL", callback_data="crypto_SOLUSDT"),
+            ],
+            [
+                InlineKeyboardButton("🪙 BNB", callback_data="crypto_BNBUSDT"),
+                InlineKeyboardButton("🪙 XRP", callback_data="crypto_XRPUSDT"),
+                InlineKeyboardButton("🪙 DOGE", callback_data="crypto_DOGEUSDT"),
+            ],
+            [
+                InlineKeyboardButton("🪙 ADA", callback_data="crypto_ADAUSDT"),
+                InlineKeyboardButton("🪙 AVAX", callback_data="crypto_AVAXUSDT"),
+                InlineKeyboardButton("🪙 DOT", callback_data="crypto_DOTUSDT"),
+            ],
+        ]
+        await update.message.reply_text(
+            "📊 *Signal Crypto* — Pilih pair:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "💱 Signal Forex":
+        keyboard = [
+            [
+                InlineKeyboardButton("💱 EURUSD", callback_data="forex_EURUSD"),
+                InlineKeyboardButton("💱 GBPUSD", callback_data="forex_GBPUSD"),
+            ],
+            [
+                InlineKeyboardButton("💱 USDJPY", callback_data="forex_USDJPY"),
+                InlineKeyboardButton("💱 XAUUSD", callback_data="forex_XAUUSD"),
+            ],
+            [
+                InlineKeyboardButton("💱 AUDUSD", callback_data="forex_AUDUSD"),
+                InlineKeyboardButton("💱 EURJPY", callback_data="forex_EURJPY"),
+            ],
+        ]
+        await update.message.reply_text(
+            "💱 *Signal Forex* — Pilih pair:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "📡 Scan All":
+        if not daily_scanner:
+            await update.message.reply_text("❌ Scanner tidak tersedia.")
+            return
+        await update.message.reply_text("⏳ Scanning semua pairs...")
+        message = await daily_scanner.run_daily_scan()
+        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+    elif text == "💰 Cek Harga":
+        keyboard = [
+            [
+                InlineKeyboardButton("💰 BTC", callback_data="price_BTCUSDT"),
+                InlineKeyboardButton("💰 ETH", callback_data="price_ETHUSDT"),
+                InlineKeyboardButton("💰 SOL", callback_data="price_SOLUSDT"),
+            ],
+            [
+                InlineKeyboardButton("💰 XAU", callback_data="price_XAUUSD"),
+                InlineKeyboardButton("💰 EUR", callback_data="price_EURUSD"),
+                InlineKeyboardButton("💰 GBP", callback_data="price_GBPUSD"),
+            ],
+        ]
+        await update.message.reply_text(
+            "💰 *Cek Harga Real-time* — Pilih:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "🔔 Alert":
+        await update.message.reply_text(
+            "🔔 *ALERT SYSTEM*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Set alert, bot notif otomatis saat SL/TP tercapai.\n\n"
+            "*Cara pasang:*\n"
+            "`/alert BTCUSDT long 67000 66000 69000`\n\n"
+            "*Format:*\n"
+            "`/alert <PAIR> <long/short> <ENTRY> <SL> <TP>`\n\n"
+            "*Manage:*\n"
+            "• /myalerts — Lihat alert aktif\n"
+            "• /removealert `ID` — Hapus alert\n\n"
+            "💡 _Tip: Signal dari /crypto atau /forex sudah include Quick Alert yang tinggal copy!_",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "📝 Paper Trade":
+        keyboard = [
+            [InlineKeyboardButton("▶️ Start Paper", callback_data="action_paperstart")],
+            [InlineKeyboardButton("📋 Journal", callback_data="action_paperjournal")],
+            [InlineKeyboardButton("📡 Force Scan", callback_data="action_paperscan")],
+        ]
+        await update.message.reply_text(
+            "📝 *PAPER TRADING*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Forward test tanpa risiko.\n"
+            "Bot scan, catat signal, cek hasil otomatis.\n\n"
+            "Pilih action:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "📐 Risk":
+        await update.message.reply_text(
+            "📐 *RISK MANAGEMENT*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"💰 Balance: `${risk_manager.balance:,.2f}`\n"
+            f"⚠️ Risk/trade: `{risk_manager.risk_pct}%` = "
+            f"`${risk_manager.balance * risk_manager.risk_pct / 100:.2f}`\n"
+            f"⚡ Leverage: `{risk_manager.leverage}x`\n\n"
+            "*Commands:*\n"
+            "`/setrisk 1000 1` — Set balance & risk %\n"
+            "`/calcsize BTCUSDT long 67000 66000 69000`\n\n"
+            "_Signal dari /scan include position size otomatis._",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "🧪 Backtest":
+        keyboard = [
+            [
+                InlineKeyboardButton("🪙 BTC 30d", callback_data="bt_BTCUSDT_30"),
+                InlineKeyboardButton("🪙 ETH 30d", callback_data="bt_ETHUSDT_30"),
+            ],
+            [
+                InlineKeyboardButton("💱 XAU 60d", callback_data="bt_XAUUSD_60"),
+                InlineKeyboardButton("💱 EUR 60d", callback_data="bt_EURUSD_60"),
+            ],
+        ]
+        await update.message.reply_text(
+            "🧪 *BACKTEST*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Cek win rate strategy di data historis.\n\n"
+            "Quick backtest atau ketik:\n"
+            "`/backtest BTCUSDT 90`",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "📖 Tutorial":
+        keyboard = [
+            [InlineKeyboardButton("1️⃣ Cara Baca Signal", callback_data="tut_signal")],
+            [InlineKeyboardButton("2️⃣ Cara Pasang Alert", callback_data="tut_alert")],
+            [InlineKeyboardButton("3️⃣ Paper Trading", callback_data="tut_paper")],
+            [InlineKeyboardButton("4️⃣ Risk Management", callback_data="tut_risk")],
+            [InlineKeyboardButton("5️⃣ Daily Auto-Scan", callback_data="tut_scan")],
+            [InlineKeyboardButton("6️⃣ Backtest Strategy", callback_data="tut_backtest")],
+        ]
+        await update.message.reply_text(
+            "📖 *TUTORIAL — CIEL AGENT*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Pilih topik yang ingin dipelajari:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif text == "❓ Help":
+        await update.message.reply_text(
+            "❓ *SEMUA COMMANDS*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "*Signal:* /crypto, /forex, /price, /quick\n"
+            "*Alert:* /alert, /myalerts, /removealert\n"
+            "*Paper:* /paperstart, /paperstop, /paperjournal, /paperscan\n"
+            "*Scan:* /scan, /subscribe, /unsubscribe\n"
+            "*Risk:* /setrisk, /calcsize\n"
+            "*Tools:* /backtest, /pivot, /manual, /list\n"
+            "*Info:* /start, /help, /tutorial",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
 # ========== LIFECYCLE ==========
 
 async def send_paper_notification(chat_id: int, message: str):
@@ -1806,6 +1972,13 @@ def main():
     app.add_handler(CommandHandler("setrisk", setrisk_command))
     app.add_handler(CommandHandler("calcsize", calcsize_command))
     app.add_handler(CommandHandler("tutorial", tutorial_command))
+    app.add_handler(MessageHandler(
+        filters.TEXT & filters.Regex(
+            r"^(📊 Signal Crypto|💱 Signal Forex|📡 Scan All|💰 Cek Harga|"
+            r"🔔 Alert|📝 Paper Trade|📐 Risk|🧪 Backtest|📖 Tutorial|❓ Help)$"
+        ),
+        handle_keyboard_buttons
+    ))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     # Error handler
